@@ -9,6 +9,7 @@
 
 import { i18next } from "@translations/invenio_communities/i18next";
 import { Formik } from "formik";
+import { extend } from "lodash";
 import _cloneDeep from "lodash/cloneDeep";
 import _defaultsDeep from "lodash/defaultsDeep";
 import _get from "lodash/get";
@@ -22,7 +23,7 @@ import _map from "lodash/map";
 import _mapValues from "lodash/mapValues";
 import _pickBy from "lodash/pickBy";
 import _unset from "lodash/unset";
-import React, { Component } from "react";
+import React, { Component, useState } from "react";
 import ReactDOM from "react-dom";
 import Dropzone from "react-dropzone";
 import { FundingField, humanReadableBytes } from "react-invenio-deposit";
@@ -42,6 +43,7 @@ import {
   Icon,
   Message,
   Segment,
+  Image as SUIImage
 } from "semantic-ui-react";
 import * as Yup from "yup";
 import { CommunityApi } from "../../api";
@@ -102,21 +104,19 @@ const removeEmptyValues = (obj) => {
   return _isNumber(obj) || _isBoolean(obj) || obj ? obj : null;
 };
 
-const LogoUploader = ({ community, defaultLogo, hasLogo, onError, logoMaxSize }) => {
+const LogoUploader = ({ community, defaultLogo, hasLogo, onError, logoMaxSize, setProfilePicture }) => {
+  const [logo, setLogo] = useState({
+    url: hasLogo ? community.links.logo : defaultLogo,
+    file: undefined
+  });
+
   let dropzoneParams = {
     preventDropOnDocument: true,
     onDropAccepted: async (acceptedFiles) => {
       const file = acceptedFiles[0];
-      const formData = new FormData();
-      formData.append("file", file);
 
-      try {
-        const client = new CommunityApi();
-        await client.updateLogo(community.id, file);
-        window.location.reload();
-      } catch (error) {
-        onError(error);
-      }
+      setProfilePicture(file);
+      setLogo({url: URL.createObjectURL(file), file: file});
     },
     onDropRejected: (rejectedFiles) => {
       // TODO: show error message when files are rejected e.g size limit
@@ -144,10 +144,9 @@ const LogoUploader = ({ community, defaultLogo, hasLogo, onError, logoMaxSize })
           <span {...getRootProps()}>
             <input {...getInputProps()} />
             <Header className="mt-0">{i18next.t("Profile picture")}</Header>
-            <Image
-              src={community.links.logo}
-              fallbackSrc={defaultLogo}
-              loadFallbackFirst={true}
+            <SUIImage
+              src={logo.url}
+              onLoad={() => {logo.file ? URL.revokeObjectURL(logo.url) : undefined}}
               fluid
               wrapped
               rounded
@@ -241,11 +240,65 @@ const DangerZone = ({ community, onError }) => (
   </Segment>
 );
 
-class CommunityProfileForm extends Component {
+
+class GlobalError extends Component {
+  render() {
+    return (
+      <Message
+        hidden={this.props.error === ""}
+        negative
+        className="flashed"
+      >
+        <Grid container>
+          <Grid.Column width={15} textAlign="left">
+            <strong>{this.props.error}</strong>
+          </Grid.Column>
+        </Grid>
+      </Message>
+    );
+  }
+}
+
+
+class ProfilePictureForm extends Component {
+  render() {
+    return (
+      <Grid.Column
+        mobile={16}
+        tablet={6}
+        computer={4}
+        floated="right"
+      >
+        <LogoUploader
+          community={this.props.community}
+          hasLogo={this.props.hasLogo}
+          defaultLogo={this.props.defaultLogo}
+          onError={this.props.setGlobalError}
+          logoMaxSize={this.props.logoMaxSize}
+        />
+      </Grid.Column>
+      // <Formik
+      //   initialValues={this.getInitialValues(this.props.community)}
+      //   validationSchema={COMMUNITY_VALIDATION_SCHEMA}
+      //   onSubmit={this.onSubmit}
+      // >
+
+      // </Formik>
+    );
+  }
+}
+
+
+class ProfileDataForm extends Component {
   state = {
-    error: "",
+    newFile: undefined
   };
+
   knownOrganizations = {};
+
+  setProfilePicture = (file) => {
+    this.setState({ newFile: file });
+  };
 
   getInitialValues = () => {
     let initialValues = _defaultsDeep(this.props.community, {
@@ -428,19 +481,16 @@ class CommunityProfileForm extends Component {
     return submittedCommunity;
   };
 
-  setGlobalError = (error) => {
-    const { message } = communityErrorSerializer(error);
-    this.setState({ error: message });
-  };
-
   onSubmit = async (values, { setSubmitting, setFieldError }) => {
     setSubmitting(true);
-    const payload = this.serializeValues(values);
+
     const client = new CommunityApi();
+
+    // Deal with metadata
+    const payload = this.serializeValues(values);
 
     try {
       await client.update(this.props.community.id, payload);
-      window.location.reload();
     } catch (error) {
       if (error === "UNMOUNTED") return;
 
@@ -449,13 +499,29 @@ class CommunityProfileForm extends Component {
       setSubmitting(false);
 
       if (message) {
-        this.setGlobalError(error);
+        this.props.setGlobalError(error);
       }
       if (errors) {
         errors.map(({ field, messages }) => setFieldError(field, messages[0]));
       }
+      return;
     }
+
+    // Deal with file
+    if (this.state.newFile) {
+      try {
+        await client.updateLogo(this.props.community.id, this.state.newFile);
+      } catch(error) {
+        setSubmitting(false);
+        this.props.setGlobalError(error);
+        return;
+      }
+    }
+
+    window.location.reload();
+
   };
+
   render() {
     const { types } = this.props;
     return (
@@ -466,17 +532,6 @@ class CommunityProfileForm extends Component {
       >
         {({ isSubmitting, isValid, handleSubmit }) => (
           <Form onSubmit={handleSubmit} className="communities-profile">
-            <Message
-              hidden={this.state.error === ""}
-              negative
-              className="flashed"
-            >
-              <Grid container>
-                <Grid.Column width={15} textAlign="left">
-                  <strong>{this.state.error}</strong>
-                </Grid.Column>
-              </Grid>
-            </Message>
             <Grid>
               <Grid.Row className="pt-10 pb-0">
                 <Grid.Column
@@ -699,16 +754,9 @@ class CommunityProfileForm extends Component {
                     community={this.props.community}
                     hasLogo={this.props.hasLogo}
                     defaultLogo={this.props.defaultLogo}
-                    onError={this.setGlobalError}
+                    onError={this.props.setGlobalError}
                     logoMaxSize={this.props.logoMaxSize}
-                  />
-                </Grid.Column>
-              </Grid.Row>
-              <Grid.Row className="danger-zone">
-                <Grid.Column width={16}>
-                  <DangerZone
-                    community={this.props.community}
-                    onError={this.setGlobalError}
+                    setProfilePicture={this.setProfilePicture}
                   />
                 </Grid.Column>
               </Grid.Row>
@@ -719,6 +767,37 @@ class CommunityProfileForm extends Component {
     );
   }
 }
+
+class CommunityProfileForm extends Component {
+  state = {
+    error: "",
+  };
+
+  setGlobalError = (error) => {
+    const { message } = communityErrorSerializer(error);
+    this.setState({ error: message });
+  };
+
+
+  render() {
+    return <>
+      <GlobalError error={this.state.error} />
+      <ProfileDataForm {...this.props}
+        setGlobalError={this.setGlobalError}
+      />
+      <DangerZone {...this.props} />
+    </>;
+  }
+}
+
+{/* <Grid.Row className="danger-zone">
+<Grid.Column width={16}>
+  <DangerZone
+    community={this.props.community}
+    onError={this.setGlobalError}
+  />
+</Grid.Column>
+</Grid.Row> */}
 
 const domContainer = document.getElementById("app");
 const community = JSON.parse(domContainer.dataset.community);
