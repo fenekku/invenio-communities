@@ -1302,7 +1302,9 @@ def test_decline_membership_request(
     result = member_service.search(owner.identity, community._record.id).to_dict()
     assert result["hits"]["total"] == 1
 
-    requests_service.execute_action(owner.identity, membership_request.id, "decline")
+    requests_service.execute_action(
+        owner.identity, membership_request._record.id, "decline"
+    )
 
     # Only owner in list
     Member.index.refresh()
