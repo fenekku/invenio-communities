@@ -968,12 +968,6 @@ class MemberService(RecordService):
         # Has to return the request so that frontend can redirect to it
         return request_item
 
-    @unit_of_work()
-    def update_membership_request(self, identity, community_id, data, uow=None):
-        """Update membership request."""
-        # TODO: Implement me
-        pass
-
     def search_membership_requests(
         self, identity, community_id, params=None, search_preference=None, **kwargs
     ):
@@ -1009,12 +1003,6 @@ class MemberService(RecordService):
             ),
             **kwargs,
         )
-
-    @unit_of_work()
-    def accept_membership_request(self, identity, request_id, uow=None):
-        """Accept membership request."""
-        # TODO: Implement me
-        pass
 
     def get_request_id_of_pending_member(self, identity, community_id):
         """
