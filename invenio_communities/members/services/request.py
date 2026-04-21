@@ -103,86 +103,6 @@ class ExpireAction(actions.ExpireAction):
 #
 # Request
 #
-class CommunityInvitation(RequestType):
-    """Community member invitation request type."""
-
-    type_id = "community-invitation"
-    name = _("Community invitation")
-
-    create_action = "create"
-    available_actions = {
-        "create": actions.CreateAndSubmitAction,
-        "delete": actions.DeleteAction,
-        "accept": AcceptAction,
-        "decline": DeclineAction,
-        "cancel": CancelAction,
-        "expire": ExpireAction,
-    }
-
-    creator_can_be_none = False
-    topic_can_be_none = False
-    allowed_creator_ref_types = ["community"]
-    allowed_receiver_ref_types = ["user"]
-    allowed_topic_ref_types = ["community"]
-
-    needs_context = {
-        "community_roles": [
-            "owner",
-            "manager",
-        ]
-    }
-
-
-#
-# MembershipRequestRequestType: actions and request type
-#
-
-
-class AcceptMembershipRequestAction(actions.AcceptAction):
-    """Accept membership request action."""
-
-    def execute(self, identity, uow):
-        """Execute action."""
-        service().accept_member_request(system_identity, self.request.id, uow=uow)
-        # TODO: notifications for accept
-        # uow.register(
-        #     NotificationOp(
-        #         (
-        #             CommunityMembershipRequestAcceptNotificationBuilder.build(
-        #                 self.request
-        #             )
-        #         )
-        #     )
-        # )
-        super().execute(identity, uow)
-
-
-class CancelMembershipRequestAction(actions.CancelAction):
-    """Cancel membership request action."""
-
-    def execute(self, identity, uow):
-        """Execute action."""
-        service().close_member_request(system_identity, self.request.id, uow=uow)
-        # TODO: Investigate notifications
-        super().execute(identity, uow)
-
-
-class DeclineMembershipRequestAction(actions.DeclineAction):
-    """Decline action."""
-
-    def execute(self, identity, uow):
-        """Execute action."""
-        service().close_member_request(system_identity, self.request.id, uow=uow)
-        # TODO: Notification for declining
-        # uow.register(
-        #     NotificationOp(
-        #         (
-        #             CommunityMembershipRequestDeclineNotificationBuilder
-        #             .build(self.request)
-        #         )
-        #     )
-        # )
-        super().execute(identity, uow)
 
 
 def is_request_created_by_current_user(obj, vars):
@@ -240,6 +160,105 @@ def update_vars_for_community_dashboard_request_view(obj, vars):
         pid_value=slug,
         request_pid_value=request.id,
     )
+
+
+class CommunityInvitation(RequestType):
+    """Community member invitation request type."""
+
+    type_id = "community-invitation"
+    name = _("Community invitation")
+
+    create_action = "create"
+    available_actions = {
+        "create": actions.CreateAndSubmitAction,
+        "delete": actions.DeleteAction,
+        "accept": AcceptAction,
+        "decline": DeclineAction,
+        "cancel": CancelAction,
+        "expire": ExpireAction,
+    }
+
+    creator_can_be_none = False
+    topic_can_be_none = False
+    allowed_creator_ref_types = ["community"]
+    allowed_receiver_ref_types = ["user"]
+    allowed_topic_ref_types = ["community"]
+
+    needs_context = {
+        "community_roles": [
+            "owner",
+            "manager",
+        ]
+    }
+
+    links_item = {
+        "self_html": ConditionalLink(
+            cond=is_request_created_by_current_user,
+            if_=EndpointLink(
+                "invenio_app_rdm_requests.user_dashboard_request_view",
+                params=["request_pid_value"],
+                vars=update_vars_for_user_dashboard_request_view,
+            ),
+            else_=EndpointLink(
+                # Ideally have a _WithFallbackEndpointLink()
+                "invenio_app_rdm_requests.community_dashboard_request_view",
+                params=["pid_value", "request_pid_value"],
+                vars=update_vars_for_community_dashboard_request_view,
+            ),
+        )
+    }
+
+
+#
+# MembershipRequestRequestType: actions and request type
+#
+
+
+class AcceptMembershipRequestAction(actions.AcceptAction):
+    """Accept membership request action."""
+
+    def execute(self, identity, uow):
+        """Execute action."""
+        service().accept_member_request(system_identity, self.request.id, uow=uow)
+        # TODO: notifications for accept
+        # uow.register(
+        #     NotificationOp(
+        #         (
+        #             CommunityMembershipRequestAcceptNotificationBuilder.build(
+        #                 self.request
+        #             )
+        #         )
+        #     )
+        # )
+        super().execute(identity, uow)
+
+
+class CancelMembershipRequestAction(actions.CancelAction):
+    """Cancel membership request action."""
+
+    def execute(self, identity, uow):
+        """Execute action."""
+        service().close_member_request(system_identity, self.request.id, uow=uow)
+        # TODO: Investigate notifications
+        super().execute(identity, uow)
+
+
+class DeclineMembershipRequestAction(actions.DeclineAction):
+    """Decline action."""
+
+    def execute(self, identity, uow):
+        """Execute action."""
+        service().close_member_request(system_identity, self.request.id, uow=uow)
+        # TODO: Notification for declining
+        # uow.register(
+        #     NotificationOp(
+        #         (
+        #             CommunityMembershipRequestDeclineNotificationBuilder
+        #             .build(self.request)
+        #         )
+        #     )
+        # )
+        super().execute(identity, uow)
 
 
 class MembershipRequestRequestType(RequestType):
