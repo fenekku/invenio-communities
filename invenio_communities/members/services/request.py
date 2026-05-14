@@ -34,6 +34,7 @@ def service():
     """Service."""
     return current_communities.service.members
 
+
 #
 # Request
 #
